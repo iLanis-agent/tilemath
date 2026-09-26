@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TileMath - honest tile math</title>
+<style>
+  :root { --bg:#121417; --card:#1a1e24; --ink:#eceff2; --dim:#9aa5ae; --acc:#5d9dbd; --win:#7fc98f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:28px 24px 8px; max-width:980px; margin:0 auto; display:flex; justify-content:space-between; align-items:baseline; }
+  h1 { margin:0; font-size:28px; }
+  h1 span { color:var(--acc); }
+  nav a { color:var(--dim); text-decoration:none; font-size:14px; }
+  main { max-width:980px; margin:0 auto; padding:16px 24px 60px; display:grid; gap:18px; }
+  .card { background:var(--card); border-radius:14px; padding:20px; }
+  .card h2 { margin:0 0 12px; font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }
+  label { display:block; font-size:13px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#13161b; border:1px solid #37424d; color:var(--ink); border-radius:8px; padding:9px 10px; font-size:15px; }
+  .hint { font-size:12.5px; color:var(--dim); margin-top:10px; }
+  button { cursor:pointer; border:0; border-radius:9px; padding:11px 16px; font-size:15px; background:var(--acc); color:#0e2129; font-weight:600; }
+  button.ghost { background:#2b333d; color:var(--ink); font-weight:500; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .verdict { font-size:17px; line-height:1.65; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:16px; }
+  .stat { background:#13161b; border-radius:10px; padding:12px; }
+  .stat .v { font-size:19px; font-weight:700; color:var(--acc); }
+  .stat .k { font-size:12px; color:var(--dim); margin-top:2px; }
+  .note { margin-top:14px; font-size:13.5px; color:var(--dim); }
+  .note b { color:var(--acc); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tile<span>Math</span></h1>
+  <nav><a href="index.html">home</a></nav>
+</header>
+<main>
+  <section class="card">
+    <h2>The job</h2>
+    <div class="grid">
+      <div><label>Area (sq ft)</label><input id="area" type="number" value="40"></div>
+      <div><label>Tile size</label><select id="tile">
+        <option value="12,12" selected>12 x 12 in</option>
+        <option value="12,24">12 x 24 in plank</option>
+        <option value="18,18">18 x 18 in</option>
+        <option value="6,6">6 x 6 in</option>
+        <option value="2,2">2 x 2 in mosaic sheet</option>
+      </select></div>
+      <div><label>Layout</label><select id="layout">
+        <option value="straight" selected>Straight (10% waste)</option>
+        <option value="diagonal">Diagonal (15% waste)</option>
+        <option value="herringbone">Herringbone (15% waste)</option>
+      </select></div>
+      <div><label>Joint width</label><select id="joint">
+        <option value="0.0625">1/16 in (rectified)</option>
+        <option value="0.125" selected>1/8 in (standard)</option>
+        <option value="0.1875">3/16 in (rustic)</option>
+      </select></div>
+      <div><label>Sq ft per box</label><input id="boxSqFt" type="number" step="0.1" value="10"></div>
+      <div><label>Tile price ($/sq ft)</label><input id="price" type="number" step="0.01" value="3.00"></div>
+    </div>
+    <p class="hint">The store sells boxes, not square feet - and the box is where projects stall. Grout and thinset below are counted by the bag, because that is how they sell those too.</p>
+    <div class="row">
+      <button id="run">Price it honestly</button>
+      <button class="ghost" data-preset="bath">small bathroom floor</button>
+      <button class="ghost" data-preset="splash">kitchen backsplash</button>
+      <button class="ghost" data-preset="herr">the herringbone hallway</button>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <h2>The cart</h2>
+    <p class="verdict" id="verdictText"></p>
+    <div class="stats" id="stats"></div>
+    <p class="note" id="advice"></p>
+  </section>
+
+  <section class="card">
+    <h2>The dye-lot trap</h2>
+    <p class="note">Same tile, different production run, visibly different shade. Buy <b>every box from the same dye lot</b> (the code is stamped on the box end), and stash <b>one full box in the attic</b>: the tile you need gets discontinued the year you crack one. Mosaics drink grout through all those joints - a 2-inch mosaic needs <b>three times the grout</b> of a 12-inch floor. And diagonal layouts burn <b>15% in edge cuts</b>, every one of them landing exactly where eyes go.</p>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var money = function (x) { return '$' + x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  var PRESETS = {
+    bath: { area: 40, tile: '12,12', layout: 'straight', joint: '0.125', boxSqFt: 10, price: 3 },
+    splash: { area: 30, tile: '2,2', layout: 'straight', joint: '0.125', boxSqFt: 10, price: 6 },
+    herr: { area: 80, tile: '12,24', layout: 'herringbone', joint: '0.125', boxSqFt: 10, price: 4 }
+  };
+  document.querySelectorAll('[data-preset]').forEach(function (b) {
+    b.onclick = function () {
+      var p = PRESETS[b.dataset.preset];
+      Object.keys(p).forEach(function (k) { $(k).value = p[k]; });
+      run();
+    };
+  });
+
+  function run() {
+    var area = +$('area').value || 0;
+    if (area <= 0) { alert('Enter an area.'); return; }
+    var tw = $('tile').value.split(',').map(Number);
+    var est = TileMath.estimate({
+      areaSqFt: area, tileWIn: tw[0], tileLIn: tw[1],
+      layout: $('layout').value, sqftPerBox: +$('boxSqFt').value || 10,
+      pricePerSqFt: +$('price').value || 0, jointIn: +$('joint').value,
+      depthIn: tw[0] <= 2 ? 0.25 : 0.375
+    });
+
+    $('verdictText').innerHTML = area + ' sq ft at ' + Math.round(est.wastePct * 100) + '% waste is <b>' +
+      est.boxes + ' boxes</b> (' + est.boxSqFtCharged + ' sq ft charged - you pay for the box, not the room), ' +
+      '<b>' + est.thinsetBags + ' bag' + (est.thinsetBags > 1 ? 's' : '') + ' of thinset</b> and <b>' +
+      est.groutBags + ' of grout</b>. The honest cart lands at <b>' + money(est.total) + '</b>.';
+
+    var stats = [
+      { v: est.tiles, k: 'tiles including waste' },
+      { v: est.boxes, k: 'boxes (' + $('boxSqFt').value + ' sq ft each)' },
+      { v: est.thinsetBags, k: 'thinset, 50lb @ ' + est.trowel + '" trowel' },
+      { v: est.groutLbs + ' lb', k: 'grout (' + est.groutBags + ' x 25lb bag)' },
+      { v: money(est.total), k: 'tile + setting materials' }
+    ];
+    $('stats').innerHTML = stats.map(function (x) {
+      return '<div class="stat"><div class="v">' + x.v + '</div><div class="k">' + x.k + '</div></div>';
+    }).join('');
+
+    $('advice').innerHTML = TileMath.advice(est, $('layout').value, area);
+    $('result').hidden = false;
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('run').onclick = run;
+})();
+</script>
+</body>
+</html>
